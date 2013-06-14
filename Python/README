@@ -1,0 +1,45 @@
+This script searches and print the zones and nodes related
+to the user's account and IP address related to the zones and nodes.
+The user must define an "A" or "AAAA" record type when searching 
+zones or nodes. The user can output the output to a file
+
+Usage: %python sipz.py [option]
+
+    Options:
+      -h, --help            show this help message and exit
+      -i IP, --ip=IP
+                            IP Address to search by
+      -t RECORD_TYPE, --record_type=RECORD_TYPE
+                            Record type to search by
+      -n, --node            Search by node
+      -z, --zone            Search by zone
+      -f FILE, --file=FILE  File to output list to
+
+
+    The library is available at:
+    https://github.com/dyninc/Dynect-API-Python-Library
+
+===============================================================
+Usage Scenarios:
+To get help on this script run this command:
+% python sipz.py -h
+
+To search by IP address:
+% python sipz.py -i <ip address>
+
+To search for IP addresses that are related to a zone:
+% python sipz.py -z -t <A or AAAA>
+
+To search for IP addresses that are related to a node:
+% python sipz.py -n -t <A or AAAA>
+
+To search by IP address and print to a file:
+% python sipz.py -i <ip address> -f <file to write to>
+
+To search for IP addresses that are related to a zone 
+and print to a file:
+% python sipz.py -z -t <A or AAAA> -f <file to write to>
+
+To search for IP addresses that are related to a node 
+and print to a file:
+% python sipz.py -n -t <A or AAAA> -f <file to write to>
