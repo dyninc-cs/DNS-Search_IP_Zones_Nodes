@@ -13,7 +13,12 @@
 #customer : customer_name
 #password : password
 
-#Usage: %php sipz.php [option]
+#Usage Examples:
+#This will go through each zone and node printing out each IPv4 Address
+#php -n -t A
+
+#This will go through each zone and node looking for the IP 1.1.1.1 and print the zone when found.
+#php -i 1.1.1.1 -t A
 
 #Options:
 #      -h, --help            Show this help message and exit
@@ -31,24 +36,17 @@ $shortopts .= "f:";
 $shortopts .= "h"; 
 $shortopts .= "i:"; 
 $shortopts .= "t:";
-$longopts  = array(
-			"zones",
-			"nodes",
-			"file:",
-			"help",
-			"ip:",
-			"type:",);	
-$options = getopt($shortopts, $longopts);
+$options = getopt($shortopts);
 
-$opt_file .= $options["f"] . $options["file"]; 
-$opt_ip .= $options["i"] . $options["ip"]; 
-$opt_type .= $options["t"] . $options["type"]; 
+$opt_file .= $options["f"]; 
+$opt_ip .= $options["i"]; 
+$opt_type .= $options["t"]; 
 $opt_type = strtoupper($opt_type);
-if (is_bool($options["z"]) || is_bool($options["zones"])) {$opt_zone = true;}
-if (is_bool($options["n"]) || is_bool($options["nodes"])) {$opt_node = true;}
+if (is_bool($options["z"])) {$opt_zone = true;}
+if (is_bool($options["n"])) {$opt_node = true;}
 
 #Print help menu
-if (is_bool($options["h"]) || is_bool($options["help"])) {
+if (is_bool($options["h"])) {
         print "\t\t-h, --help\t\t Show the help message and exit\n";
         print "\t\t-i, --ip\t\t IP Address to search by\n";
         print "\t\t-t, --record_type\t\t Record type to search by\n";
