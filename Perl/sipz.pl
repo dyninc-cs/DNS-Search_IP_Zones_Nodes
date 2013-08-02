@@ -5,31 +5,33 @@
 #the node or zone flag. The user can output to a file
 
 #The credentials are read out of a configuration file in the
-#same directory name credentials.crg in the format:
+#same directory name config.cfg in the format:
 
 #[Dynect]
-#user : user_name
-#customer : customer_name
-#password : password
+#un: user_name
+#cn: customer_name
+#pn: password
 
-#Usage: %perl sipz.pl [option]
+#Usage Examples:
+#This will go through each zone and node printing out each IPv4 Address
+#perl -n -t A
+
+#This will go through each zone and node looking for the IP 1.1.1.1 and print the zone when found.
+#perl -i 1.1.1.1 -t A
 
 #Options:
 #      -h, --help            Show this help message and exit
-#      -i --ip               IP Address to search by
-#      -t --type             Record type to search by
-#      -n, --node            Search by node
-#      -z, --zone            Search by zone
-#      -f --file	     File to output list to
-
-#TODO: Better way of printing results AND COMMENTS
+#      -i --ip               Search through every zone & node by IP address
+#      -t --type             Record type to search by [A or AAAA]
+#      -n, --node            Go through each zone printing the IP address [v4 or v6]
+#      -z, --zone            Go through each zone and node printing the IP address [v4 or v6]
+#      -f --file	     Filename to output list
 
 use warnings;
 use strict;
-use Data::Dumper;
 use XML::Simple;
 use Config::Simple;
-use Getopt::Long qw(:config no_ignore_case);
+use Getopt::Long;
 use LWP::UserAgent;
 use JSON;
 use IO::Handle;
@@ -51,6 +53,27 @@ GetOptions(
 	'nodes' => \$opt_node,
 	'file=s' =>\$opt_file,
 );
+
+#Printing help menu
+if ($opt_help) {
+	print "Options:\n";
+	print "-h, --help\t\t Show the help message and exit\n";
+	print "-i, --ip\t\t Search through every zone & node by IP\n";
+	print "-t, --type\t\t Record type to search by [A or AAAA]\n";
+	print "-z, --zones\t\t Go through each zone printing the IP\n";
+	print "-n, --nodes\t\t Go through each zone & node printing the IP\n";
+	print "-f, --file\t\t Filename to output\n\n";
+	exit;
+}
+#Let the user know what they are searching for if -i
+if($opt_ip ne "")
+	{print "Search results for the IP: $opt_ip\n";}
+
+if($opt_type eq "" && $opt_ip ne "")
+{
+	print "Please enter a valid type. Use -t \"A\" or -t \"AAAA\"\n";
+	exit;
+}
 $opt_type = uc($opt_type);
 if ($opt_type ne "A" && $opt_type ne "AAAA" && $opt_type)
 {
@@ -63,19 +86,6 @@ elsif(!$opt_type && ($opt_zone || $opt_node))
 	exit;
 
 }
-
-
-#Printing help menu
-if ($opt_help) {
-	print "\t\t-h, --help\t\t Show the help message and exit\n";
-	print "\t\t-i, --ip\t\t IP Address to search by\n";
-	print "\t\t-t, --record_type\t\t Record type to search by\n";
-	print "\t\t-z, --zones\t\t Print the zones\n";
-	print "\t\t-n, --nodes\t\t Print the nodes\n";
-	print "\t\t-f, --file\t\t File to output\n\n";
-	exit;
-}
-
 #If the user wants it printed to a file, set standard output to file
 if($opt_file ne "")
 {
@@ -136,65 +146,47 @@ foreach my $zoneIn (@{$api_decode->{'data'}})
 {
 	#Getting the zone name out of the response.
 	$zoneIn =~ /\/REST\/Zone\/(.*)\/$/;
-	my $zone_name = $1;
+	my $zoneName = $1;
 	%api_param = ();
-	print "ZONE: $zone_name\n" unless($opt_ip) ;
+	print "ZONE: $zoneName\n" unless($opt_ip) ;
 
-	$session_uri = "https://api2.dynect.net/REST/NodeList/$zone_name/";
+	$session_uri = "https://api2.dynect.net/REST/NodeList/$zoneName/";
 	$api_decode = &api_request($session_uri, 'GET', %api_param); 
 	#Print each node in zone
-	foreach my $nodeIn (@{$api_decode->{'data'}})
+	foreach my $nodeName (@{$api_decode->{'data'}})
 	{	
-		print &getRecordData($zone_name, $nodeIn);
+		##Set param to empty
+		%api_param = ();
+		$session_uri = "https://api2.dynect.net/REST/$opt_type"."Record/$zoneName/$nodeName/";
+		$api_decode = &api_request($session_uri, 'GET', %api_param);
+		print "\tNODE: $nodeName\n" unless(!$opt_node);
+		my $addresslist ="";	
+		foreach my $RecordURI (@{$api_decode->{'data'}})
+		{
+			$api_decode = &api_request("https://api2.dynect.net$RecordURI", 'GET', %api_param);
+			my $rec_type =  $api_decode->{'data'}->{'record_type'};
+			#If the record type from the result is A or AAAA and -i is set
+			if(($rec_type eq "A"  ||  $rec_type eq "AAAA") && $opt_ip)
+			{
+				#Print the node name if the response address equals -i
+				my $address = $api_decode->{'data'}->{'rdata'}->{'address'};
+				if($address eq $opt_ip)
+				{print "\t\t$nodeName\n";}
+			}
+
+			#If the the -t equals the record type print the address
+			elsif(($rec_type eq "A" &&  $opt_type eq "A") ||  ($rec_type eq "AAAA" &&  $opt_type eq "AAAA"))
+			{
+				my $address = $api_decode->{'data'}->{'rdata'}->{'address'};
+				print "\t\t$address\n";
+			}
+		}
 	}
 }
-
-
 #api logout
 %api_param = ();
 $session_uri = 'https://api2.dynect.net/REST/Session';
 &api_request($session_uri, 'DELETE', %api_param); 
-
-sub getRecordData
-{
-	my($zoneName, $nodeName) = @_;
-	##Set param to empty
-	%api_param = ();
-	$session_uri = "https://api2.dynect.net/REST/ANYRecord/$zoneName/$nodeName/";
-	$api_decode = &api_request($session_uri, 'GET', %api_param);
-	print "\tNODE: $nodeName\n" unless(!$opt_node);
-	my $addresslist ="";	
-	foreach my $RecordURI (@{$api_decode->{'data'}})
-	{
-		$api_decode = &api_request("https://api2.dynect.net$RecordURI", 'GET', %api_param);
-		#print Dumper($api_decode);
-		my $type =  $api_decode->{'data'}->{'record_type'};
-		&display_data($type, $api_decode, $nodeName );
-	}
-	return $addresslist;
-}
-
-sub display_data
-{
-	my($rec_type, $api_decode, $nodeName) = @_;
-
-	if(($rec_type eq "A" &&  $opt_type eq "A") ||  ($rec_type eq "AAAA" &&  $opt_type eq "AAAA"))
-	{
-		my $address = $api_decode->{'data'}->{'rdata'}->{'address'};
-		print "\t\t$address\n";
-
-	}
-
-	elsif(($rec_type eq "A"  ||  $rec_type eq "AAAA") && $opt_ip)
-	{
-		my $address = $api_decode->{'data'}->{'rdata'}->{'address'};
-		if($address eq $opt_ip)
-		{print "\t\t$nodeName\n";}
-	}
-
-
-
-}
 
 #Accepts Zone URI, Request Type, and Any Parameters
 sub api_request{
