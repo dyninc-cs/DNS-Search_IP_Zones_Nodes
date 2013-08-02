@@ -1,0 +1,60 @@
+Dyn Inc, Integration Team Deliverable
+"Copyright © 2013, Dyn Inc.
+All rights reserved.
+ 
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are
+met:
+ 
+* Redistributions of source code must retain the above copyright notice,
+  this list of conditions and the following disclaimer.
+ 
+* Redistributions in binary form must reproduce the above copyright
+  notice, this list of conditions and the following disclaimer in the
+  documentation and/or other materials provided with the distribution.
+ 
+* Neither the name of Dynamic Network Services, Inc. nor the names of
+  its contributors may be used to endorse or promote products derived
+  from this software without specific prior written permission.
+ 
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
+CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ADVISED OF THE POSSIBILITY OF SUCH DAMAGE."
+
+___________________________________________________________________________________
+
+This script searches and print the zones and nodes related
+to the user's account and the IP address related to the zones
+and nodes. The user must declare an "A" or "AAAA" when using
+the node or zone flag. The user can output to a file
+
+The credentials are read out of a configuration file in the
+same directory name config.cfg in the format:
+
+[Dynect]
+un: user_name
+cn: customer_name
+pn: password
+
+Usage Examples:
+This will go through each zone and node printing out each IPv4 Address
+php -n -t A
+
+This will go through each zone and node looking for the IP 1.1.1.1 and print the zone when found.
+php -i 1.1.1.1 -t A
+
+Options:
+-h, --help            Show this help message and exit
+-i --ip               Search through every zone & node by IP address
+-t --type             Record type to search by [A or AAAA]
+-n, --node            Go through each zone printing the IP address [v4 or v6]
+-z, --zone            Go through each zone and node printing the IP address [v4 or v6]
+-f --file             Filename to output list
