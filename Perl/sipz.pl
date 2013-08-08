@@ -36,14 +36,20 @@ use LWP::UserAgent;
 use JSON;
 use IO::Handle;
 
+#Import DynECT handler
+use FindBin;
+use lib "$FindBin::Bin/DynECT";  # use the parent directory
+require DynECT::DNS_REST;
+
 #Get Options
 my $opt_zone;
 my $opt_node;
 my $opt_help;
-my $opt_ip;
+my $opt_ip = "";
 my $opt_type ="";
 my $list;
 my $opt_file="";
+my %api_param;
 
 GetOptions(
 	'help' => \$opt_help,
@@ -118,31 +124,16 @@ my $apipw = $configopt{'pw'} or do {
 };
 
 #API login
-my $session_uri = 'https://api2.dynect.net/REST/Session';
-my %api_param = ( 
-	'customer_name' => $apicn,
-	'user_name' => $apiun,
-	'password' => $apipw,
-);
-
-#API Login
-my $api_request = HTTP::Request->new('POST',$session_uri);
-$api_request->header ( 'Content-Type' => 'application/json' );
-$api_request->content( to_json( \%api_param ) );
-
-my $api_lwp = LWP::UserAgent->new;
-my $api_result = $api_lwp->request( $api_request );
-
-my $api_decode = decode_json ( $api_result->content ) ;
-my $api_key = $api_decode->{'data'}->{'token'};
+my $dynect = DynECT::DNS_REST->new;
+$dynect->login( $apicn, $apiun, $apipw) or
+	die $dynect->message;
 
 
 ##Set param to empty
 %api_param = ();
-$session_uri = "https://api2.dynect.net/REST/Zone/";
-$api_decode = &api_request($session_uri, 'GET', %api_param);
+$dynect->request( "/REST/Zone", 'GET',  \%api_param) or die $dynect->message;
 
-foreach my $zoneIn (@{$api_decode->{'data'}})
+foreach my $zoneIn (@{$dynect->result->{'data'}})
 {
 	#Getting the zone name out of the response.
 	$zoneIn =~ /\/REST\/Zone\/(.*)\/$/;
@@ -150,26 +141,24 @@ foreach my $zoneIn (@{$api_decode->{'data'}})
 	%api_param = ();
 	print "ZONE: $zoneName\n" unless($opt_ip) ;
 
-	$session_uri = "https://api2.dynect.net/REST/NodeList/$zoneName/";
-	$api_decode = &api_request($session_uri, 'GET', %api_param); 
+	$dynect->request( "/REST/NodeList/$zoneName", 'GET',  \%api_param) or die $dynect->message;
 	#Print each node in zone
-	foreach my $nodeName (@{$api_decode->{'data'}})
+	foreach my $nodeName (@{$dynect->result->{'data'}})
 	{	
 		##Set param to empty
 		%api_param = ();
-		$session_uri = "https://api2.dynect.net/REST/$opt_type"."Record/$zoneName/$nodeName/";
-		$api_decode = &api_request($session_uri, 'GET', %api_param);
+		$dynect->request( "/REST/$opt_type"."Record/$zoneName/$nodeName", 'GET',  \%api_param) or die $dynect->message;
 		print "\tNODE: $nodeName\n" unless(!$opt_node);
 		my $addresslist ="";	
-		foreach my $RecordURI (@{$api_decode->{'data'}})
+		foreach my $RecordURI (@{$dynect->result->{'data'}})
 		{
-			$api_decode = &api_request("https://api2.dynect.net$RecordURI", 'GET', %api_param);
-			my $rec_type =  $api_decode->{'data'}->{'record_type'};
+			$dynect->request( "$RecordURI", 'GET',  \%api_param) or die $dynect->message;
+			my $rec_type =  $dynect->result->{'data'}->{'record_type'};
 			#If the record type from the result is A or AAAA and -i is set
 			if(($rec_type eq "A"  ||  $rec_type eq "AAAA") && $opt_ip)
 			{
 				#Print the node name if the response address equals -i
-				my $address = $api_decode->{'data'}->{'rdata'}->{'address'};
+				my $address = $dynect->result->{'data'}->{'rdata'}->{'address'};
 				if($address eq $opt_ip)
 				{print "\t\t$nodeName\n";}
 			}
@@ -177,65 +166,12 @@ foreach my $zoneIn (@{$api_decode->{'data'}})
 			#If the the -t equals the record type print the address
 			elsif(($rec_type eq "A" &&  $opt_type eq "A") ||  ($rec_type eq "AAAA" &&  $opt_type eq "AAAA"))
 			{
-				my $address = $api_decode->{'data'}->{'rdata'}->{'address'};
+				my $address = $dynect->result->{'data'}->{'rdata'}->{'address'};
 				print "\t\t$address\n";
 			}
 		}
 	}
 }
-#api logout
-%api_param = ();
-$session_uri = 'https://api2.dynect.net/REST/Session';
-&api_request($session_uri, 'DELETE', %api_param); 
-
-#Accepts Zone URI, Request Type, and Any Parameters
-sub api_request{
-	#Get in variables, send request, send parameters, get result, decode, display if error
-	my ($zone_uri, $req_type, %api_param) = @_;
-	$api_request = HTTP::Request->new($req_type, $zone_uri);
-	$api_request->header ( 'Content-Type' => 'application/json', 'Auth-Token' => $api_key );
-	$api_request->content( to_json( \%api_param ) );
-	$api_result = $api_lwp->request($api_request);
-	$api_decode = decode_json( $api_result->content);
-	$api_decode = &api_fail(\$api_key, $api_decode) unless ($api_decode->{'status'} eq 'success');
-	return $api_decode;
-}
-
-#Expects 2 variable, first a reference to the API key and second a reference to the decoded JSON response
-sub api_fail {
-	my ($api_keyref, $api_jsonref) = @_;
-	#set up variable that can be used in either logic branch
-	my $api_request;
-	my $api_result;
-	my $api_decode;
-	my $api_lwp = LWP::UserAgent->new;
-	my $count = 0;
-	#loop until the job id comes back as success or program dies
-	while ( $api_jsonref->{'status'} ne 'success' ) {
-		if ($api_jsonref->{'status'} ne 'incomplete') {
-			foreach my $msgref ( @{$api_jsonref->{'msgs'}} ) {
-				print "API Error:\n";
-				print "\tInfo: $msgref->{'INFO'}\n" if $msgref->{'INFO'};
-				print "\tLevel: $msgref->{'LVL'}\n" if $msgref->{'LVL'};
-				print "\tError Code: $msgref->{'ERR_CD'}\n" if $msgref->{'ERR_CD'};
-				print "\tSource: $msgref->{'SOURCE'}\n" if $msgref->{'SOURCE'};
-			};
-			#api logout or fail
-			$api_request = HTTP::Request->new('DELETE','https://api2.dynect.net/REST/Session');
-			$api_request->header ( 'Content-Type' => 'application/json', 'Auth-Token' => $$api_keyref );
-			$api_result = $api_lwp->request( $api_request );
-			$api_decode = decode_json ( $api_result->content);
-			exit;
-		}
-		else {
-			sleep(5);
-			my $job_uri = "https://api2.dynect.net/REST/Job/$api_jsonref->{'job_id'}/";
-			$api_request = HTTP::Request->new('GET',$job_uri);
-			$api_request->header ( 'Content-Type' => 'application/json', 'Auth-Token' => $$api_keyref );
-			$api_result = $api_lwp->request( $api_request );
-			$api_jsonref = decode_json( $api_result->content );
-		}
-	}
-	$api_jsonref;
-}
+#API logout
+$dynect->logout;
 
